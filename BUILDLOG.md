@@ -26,7 +26,7 @@ This file is updated as milestones land. The initial package and signing core ar
 - I decided: Git-ignored files stay ignored while all other untracked files are captured; an observed deployment is evidence that an external action happened, not an authorization request; L3 is blocked when L2 fails.
 - Alternatives rejected: filtering common generated files inside Rewind, retroactive approval of an observed deployment, a second receipt logic path for HTML, and adding a Codex hook before acceptance.
 - Tests run through Rewind: 2 passed at `cp_03`; an intentional expanded-suite failure at `cp_05` exposed an unignored test cache; 10 passed at `cp_06`; 11 passed including MCP at `cp_08`; offline demo passed at `cp_07` and again from a fresh console install at `cp_09`.
-- Commit SHA: pending.
+- Commit SHA: `d9d8e41`.
 - Limitations: the audit engine intentionally supports only the two documented policies; the active Codex session predates `.codex/config.toml`, so MCP is verified through a real stdio client round trip and must be discovered by Codex after restart.
 
 ## 2026-07-20T05:44Z — Visual and install verification
@@ -35,5 +35,14 @@ This file is updated as milestones land. The initial package and signing core ar
 - I decided: keep the calm graphite instrument aesthetic at a 1280×720 target; show the developer receipt first and the L0–L3 language only in the audit reveal.
 - Alternatives rejected: installing Node solely for Playwright, external fonts/assets, JavaScript UI, gradients, and decorative effects.
 - Tests run: fresh `venv/bin/pip install -e '.[dev]'`; installed `rewind --help` and `--version`; in-app real-browser checks at 1280×720 for both reports; zero horizontal overflow, external assets, scripts, console warnings, or errors.
-- Commit SHA: pending.
+- Commit SHA: core `d9d8e41`; tests `028d934`.
 - Limitation: the dot-prefixed `.venv/` on this Mac inherited a filesystem hidden flag that Python used to skip editable `.pth` loading; the documented non-hidden `venv/` path avoids that environment-specific issue.
+
+## 2026-07-20T05:49Z — Code freeze and judge handoff
+
+- Codex implemented: complete README, exact three-minute demo script, generated-fixture guide, CLI-replayable forensic repositories, architecture and format documentation, and explicit collaboration/threat-model sections.
+- I decided: generated fixtures remain disposable rather than committed; the README carries a clearly marked `/feedback` placeholder until the submission action returns the real Session ID.
+- Alternatives rejected: a checked-in private/demo identity, a misleading screenshot that could drift, and claims of Windows validation or universal enforcement.
+- Tests run: 12 passed including the full generated-demo layout; final offline demo generated; both documented CLI replay commands passed; recovery branch exists while `main` remains checked out; Git hygiene, report self-containment, and secret/private-state audit passed; `codex mcp list/get` recognizes the enabled project server.
+- Commit SHA: pending.
+- Limitation: the already-running desktop task cannot inject newly configured MCP tools into its active tool set; the Codex CLI recognizes the server and the stdio transport/exact five tools are acceptance-tested directly. A new task or client restart is required for the recorded MCP demo call.

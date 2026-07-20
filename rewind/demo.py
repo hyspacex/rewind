@@ -32,11 +32,14 @@ def _git(root: Path, *args: str) -> None:
 
 
 def _audit_log(directory: Path) -> tuple[EventLog, Path, Path]:
+    directory.mkdir(parents=True, exist_ok=True)
+    _git(directory, "init", "-b", "main")
     local = directory / ".rewind"
     objects = local / "objects" / "sha256"
     objects.mkdir(parents=True)
     signing_key = SigningKey(bytes(range(32)))
-    public = local / "recorder.pub"
+    public = local / "keys" / "recorder.pub"
+    public.parent.mkdir(parents=True)
     public.write_text(encode_key(bytes(signing_key.verify_key)) + "\n", encoding="utf-8")
     log = EventLog(local / "events.jsonl", signing_key)
     log.append(
@@ -262,7 +265,6 @@ def create_demo(output: Path) -> dict[str, Any]:
     }
     for name, options, tamper in scenario_specs:
         directory = output / "forensics" / name
-        directory.mkdir(parents=True)
         events_path, public, objects, action_id = _base_lifecycle(directory, **options)
         if tamper:
             evidence_event = next(

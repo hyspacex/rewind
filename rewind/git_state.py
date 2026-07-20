@@ -80,7 +80,11 @@ def checkpoint(
     env["GIT_INDEX_FILE"] = index_name
     try:
         _git(root, "read-tree", "HEAD", env=env)
-        _git(root, "add", "-A", "--", ".", ":(exclude).rewind/**", env=env)
+        _git(root, "add", "-A", "--", ".", env=env)
+        # Remove recorder-local files from the temporary index even when the
+        # host repository does not ignore `.rewind/`. This reset affects only
+        # GIT_INDEX_FILE, never the developer's real index or working tree.
+        _git(root, "reset", "-q", "HEAD", "--", ".rewind", env=env)
         tree = _git(root, "write-tree", env=env).stdout.strip()
         commit_message = f"Rewind checkpoint {checkpoint_id}: {label}\n\nTask: {task_id}\n"
         commit = _git(
@@ -128,4 +132,3 @@ def create_recovery_branch(root: Path, name: str, commit: str) -> None:
     if _git(root, "show-ref", "--verify", "--quiet", f"refs/heads/{name}", check=False).returncode == 0:
         raise RewindError(f"Branch already exists: {name}")
     _git(root, "branch", name, commit)
-

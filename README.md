@@ -1,8 +1,261 @@
 # Rewind
 
-**A flight recorder for coding agents.**
+**A flight recorder for coding agents**
 
-Rewind answers the immediate question after an agent finishes: what changed, did it stay in scope, which exact version passed checks, and where can I safely recover? It also preserves a signed event history for later team audit.
+Rewind shows exactly what your coding agent did, catches where it went off course, and gives you a safe place to recover—with a signed record teams can audit later.
 
-> Active Build Week implementation. The complete judge path, architecture, threat model, and collaboration notes are filled in before code freeze.
+The default experience is an agent task receipt, not a compliance dashboard:
+
+- What changed, and which paths were outside the scope I declared?
+- Were dependencies, CI, or deployment files touched?
+- Which exact Git tree passed a recorded check?
+- What changed after that check?
+- Where can I create a recovery branch without disturbing my current work?
+
+Underneath that developer experience is a signed append-only event log and a deliberately narrow historical policy engine. That second layer can establish that a record is authentic while still concluding that an observed deployment was not authorized.
+
+## One-command judge path
+
+Prerequisites: Python 3.10 or newer and Git with a configured user name/email.
+
+```bash
+python3 -m venv venv
+venv/bin/pip install -e '.[dev]'
+venv/bin/rewind demo --output /tmp/rewind-judge-demo
+```
+
+Open:
+
+- `/tmp/rewind-judge-demo/task-report.html` for the developer task receipt.
+- `/tmp/rewind-judge-demo/forensic-report.html` for all four audit scenarios.
+
+The demo is local, deterministic in behavior, and network-free. Use a new or empty output directory on each run.
+
+## Requirements and supported platforms
+
+- Python 3.10+
+- Git and a repository with at least one commit for normal task recording
+- macOS or Linux
+
+The core uses portable Python and Git commands, but Windows has not been tested in this build. The checked-in Codex example uses the POSIX `venv/bin/python` path.
+
+Runtime dependencies are limited to `mcp`, `PyNaCl`, `rich`, and `typer`. Tests use `pytest`. Rewind does not call OpenAI or any other model at runtime.
+
+## Five-minute quick start
+
+Install in a Git repository:
+
+```bash
+python3 -m venv venv
+venv/bin/pip install -e /path/to/rewind
+venv/bin/rewind init
+```
+
+Start a narrowly scoped task:
+
+```bash
+venv/bin/rewind start \
+  --intent "Add retry handling to the upload worker" \
+  --allow "demo_app/upload/**" \
+  --allow "tests/**"
+```
+
+Record meaningful state and checks:
+
+```bash
+venv/bin/rewind checkpoint --label "Retry implementation"
+venv/bin/rewind run -- pytest -q
+venv/bin/rewind finish
+```
+
+Review and recover:
+
+```bash
+venv/bin/rewind receipt
+venv/bin/rewind report --output rewind-report.html
+venv/bin/rewind timeline
+venv/bin/rewind recover cp_02 --branch rewind/retry-last-tested
+```
+
+`recover` only creates a branch at the selected checkpoint commit. It never checks out, resets, cleans, stashes, overwrites, or otherwise changes the current branch, HEAD, index, or working tree.
+
+## Task receipt signals
+
+All signals are deterministic and inspectable:
+
+- **Scope excursion:** changed paths are matched against the `--allow` globs recorded at task start.
+- **Dependency change:** common Python, Node, Rust, and Go manifests and lockfiles are recognized.
+- **Protected-path change:** project-configured globs cover deployment, CI, and dependency files by default.
+- **Evidence freshness:** every check is bound to the checkpoint/tree immediately before the command ran; the receipt diffs that tree against the final tree.
+- **Missing or failing evidence:** no successful check and a most-recent failed check are explicit failure states.
+- **Recovery readiness:** the latest checkpoint with passing evidence is the recommended safe state.
+
+The CLI and HTML report render the same `rewind.receipt.v1` result. There is no second renderer-specific risk engine.
+
+## Real Git checkpoints
+
+Checkpoint is not a label over `git status`. Rewind:
+
+1. Creates a temporary Git index under `.rewind/tmp/`.
+2. Loads the current `HEAD` tree into it.
+3. adds the working tree, including non-ignored untracked files and deletions, while excluding `.rewind/`;
+4. writes a tree and a commit with `git write-tree` and `git commit-tree`;
+5. stores the commit under `refs/rewind/checkpoints/<task-id>/<checkpoint-id>`.
+
+The real index, branch, HEAD, and working tree are untouched. Git-ignored files remain ignored. A recovery branch is a normal branch pointing at the selected checkpoint commit.
+
+## Signed record format
+
+`.rewind/events.jsonl` is a canonical-JSON, append-only interface. Every event contains:
+
+- schema and monotonic sequence number;
+- UTC display timestamp;
+- actor assertion and typed payload;
+- previous content ID;
+- recorder key fingerprint;
+- SHA-256 content ID;
+- Ed25519 signature.
+
+Canonical JSON uses UTF-8, sorted keys, no insignificant whitespace, and rejects non-finite numbers. The content ID is SHA-256 over the unsigned event. The signature covers the canonical envelope:
+
+```text
+{"content_id": "<sha256>", "event": <unsigned-event>}
+```
+
+Evidence, policies, and artifacts are stored by SHA-256 and referenced from signed events. A mutable filename is never the historical policy source of truth.
+
+## Historical replay
+
+Rewind intentionally supports two small policies:
+
+- **v1:** protected changes need successful evidence and one human approval.
+- **v2:** v1 plus separation of duties; an observed deployment also requires the actor to hold the `deployer` role at that event.
+
+Replay folds signed events in order and reports:
+
+- **L0 Record:** schema, ordering, references, and event structure.
+- **L1 Integrity:** content IDs, chain, signatures, immutable evidence/policy/artifact hashes.
+- **L2 Binding:** evidence, approval, repository tree, and artifact refer to the same action; separation of duties when active.
+- **L3 As-of Authority:** the actor held the required role under the policy active at that point.
+
+It evaluates the action twice: under the historical policy/roles and under the currently active policy/roles. Drift is classified as none, breaking/tightening, relaxing, unchanged allow, or unchanged deny.
+
+### Four forensic scenarios
+
+`rewind demo` produces four separately signed lifecycles:
+
+1. **Tampered evidence blob:** the signed event retains the original hash but the blob changed; L1 fails.
+2. **Approval absent:** a valid lifecycle was signed without an approval; L2 fails. No chained line was deleted.
+3. **Role revoked:** signatures, objects, evidence, approval, and binding pass; the deployment was observed after revocation; only L3 fails.
+4. **Policy evolution:** one actor could propose and approve under v1; historical evaluation allows it, current v2 rejects a repeat.
+
+Replay any generated fixture through the CLI:
+
+```bash
+ROOT="$PWD"
+cd /tmp/rewind-judge-demo/forensics/03-role-revoked
+"$ROOT/venv/bin/rewind" replay action_deploy_01
+```
+
+The fixture uses `deployment_observed` because Rewind may record that an external action happened even when it was unauthorized. It does not pretend a fail-closed request both blocked and performed a deployment.
+
+## Codex MCP setup
+
+The repository includes a verified project configuration at `.codex/config.toml`:
+
+```toml
+[mcp_servers.rewind]
+command = "venv/bin/python"
+args = ["-m", "rewind.mcp_server"]
+cwd = "."
+```
+
+Create `venv/`, install the package, trust the repository in Codex, then start a new Codex task or restart the client so it discovers the project configuration. Use `/mcp` to confirm these tools:
+
+- `start_task(intent, allowed_paths)`
+- `get_status()`
+- `checkpoint(label)`
+- `run_check(argv)`
+- `finish_task()`
+
+There is deliberately no MCP approval tool. A governed agent cannot approve its own protected action; `rewind approve ACTION_ID` is human CLI territory.
+
+`AGENTS.md` tells Codex to join/start a task, keep scope narrow, record checkpoints and checks, finish before claiming completion, and never self-approve. MCP is an ergonomic adapter over the same Python functions as the CLI. It is not a claim that every possible filesystem write is universally mediated.
+
+### CLI fallback
+
+If the current Codex session started before `.codex/config.toml` existed, use the CLI commands above and restart later. The complete product and judge demo work without MCP discovery.
+
+## Architecture
+
+```text
+Typer CLI ─┐
+           ├── task core ── Git snapshot / evidence / signed event store
+stdio MCP ─┘                    │
+                               ├── shared receipt result ── Rich CLI
+                               │                         └── one-file HTML
+                               └── replay ── historical policy + role fold
+```
+
+Key modules:
+
+- `crypto.py` / `events.py`: canonicalization, signatures, chain verification.
+- `git_state.py`: temporary-index checkpoint commits and branch-only recovery.
+- `evidence.py` / `task.py`: direct argv execution (`shell=False`) and lifecycle.
+- `receipt.py` / `report.py`: shared developer findings and standalone HTML.
+- `policy.py` / `replay.py`: v1/v2 historical and current verdicts.
+- `mcp_server.py`: thin stdio adapter.
+- `demo.py`: disposable developer story and four audit fixtures.
+
+## Threat model and limitations
+
+Rewind is tamper-evident under one trusted local recorder key:
+
+- One recorder signs assertions about actors. This is not multi-party non-repudiation.
+- A stolen private key can rewrite history unless a content ID was checkpointed externally.
+- JSONL presents an append-only interface; ordinary local storage is not magically immutable.
+- Rewind records normal repository activity and catches deterministic review concerns. It is not a universal filesystem gateway.
+- The recorder cannot truthfully govern its own installation. The root bootstrap commit is an explicit genesis exception.
+- Git checkpoints include non-ignored untracked files, not ignored caches/secrets.
+- Policy replay is deliberately narrow, not a general policy language or Cedar implementation.
+- `deployment_observed` records an external fact; it does not perform deployment.
+- The demo signing identity is disposable. No project private key, live recorder state, or credentials are committed.
+
+## Why no blockchain
+
+The core problem is binding intent, repository state, checks, approval, artifacts, and historical roles—not global consensus. A canonical hash chain plus Ed25519 signatures makes mutation evident under the stated trusted-recorder model with far less operational and conceptual weight. Teams that need stronger anchoring can externally publish selected content IDs without changing the local developer workflow.
+
+## Development and tests
+
+```bash
+python3 -m venv venv
+venv/bin/pip install -e '.[dev]'
+venv/bin/pytest
+venv/bin/rewind --help
+venv/bin/rewind demo --output /tmp/rewind-acceptance-demo
+```
+
+The suite covers event mutation, chain breaks, evidence tampering, untracked files, real-index/branch/HEAD/worktree preservation, recovery branches, scope and dependency detection, stale evidence, self-contained HTML, the four replay outcomes, and a real stdio MCP initialize/list/call round trip.
+
+## How I collaborated with Codex and GPT-5.6
+
+Codex with GPT-5.6 was the design and implementation partner for this Build Week project. It accelerated:
+
+- translating the locked product brief into separated Python modules;
+- implementing and testing Git plumbing, Ed25519 envelopes, and replay folds;
+- iterating on the Rich receipt and 1280×720 report presentation;
+- building disposable fixtures and running failure-driven acceptance tests;
+- verifying the installed Codex MCP configuration behavior against the current CLI and official documentation.
+
+I made the product and scope decisions: the developer receipt is the front door; historical authorization is the final reveal; verification stays deterministic; recovery is branch-only; policy remains narrow; one local recorder identity is honest for this build; there is no blockchain, cloud service, runtime LLM decoration, destructive rollback, or optional hook competing with core quality.
+
+The first commit is the documented bootstrap/genesis exception because a recorder cannot govern its own installation. Rewind was initialized immediately afterward and recorded the remaining build as task `task_97167c332e`.
+
+The Rewind runtime itself does **not** use GPT-5.6 or make OpenAI API calls.
+
+Primary Codex `/feedback` Session ID: **TODO before submission — run `/feedback` in the build session and paste the returned Session ID here.**
+
+## License
+
+MIT. See `LICENSE`.
 

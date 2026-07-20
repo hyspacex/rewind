@@ -37,6 +37,12 @@ def test_checkpoint_preserves_real_git_state_and_captures_untracked(git_repo: Pa
     assert git(git_repo, "write-tree") == before_index
     assert git(git_repo, "show", f"{snapshot.commit}:untracked.txt") == "included"
     assert git(git_repo, "show", f"{snapshot.commit}:tracked.txt") == "working tree"
+    assert subprocess.run(
+        ["git", "cat-file", "-e", f"{snapshot.commit}:.rewind/config.json"],
+        cwd=git_repo,
+        capture_output=True,
+        check=False,
+    ).returncode != 0
 
 
 def test_recovery_creates_branch_without_switching(git_repo: Path) -> None:
@@ -53,4 +59,3 @@ def test_recovery_creates_branch_without_switching(git_repo: Path) -> None:
     assert git(git_repo, "branch", "--show-current") == branch_before
     assert git(git_repo, "rev-parse", "HEAD") == head_before
     assert git(git_repo, "status", "--porcelain=v1") == status_before
-
