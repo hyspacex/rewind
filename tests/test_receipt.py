@@ -3,7 +3,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from rewind.receipt import build_receipt, dependency_files
+from rewind.receipt import build_receipt, dependency_files, path_matches
 from rewind.report import render_report
 from rewind.store import initialize
 from rewind.task import finish_task, run_check, start_task
@@ -64,3 +64,8 @@ def test_dependency_patterns() -> None:
         "go.sum",
     ]
 
+
+def test_hidden_paths_keep_their_leading_dot_for_scope_matching() -> None:
+    assert path_matches(".codex/config.toml", ".codex/**")
+    assert path_matches(".gitignore", ".gitignore")
+    assert not path_matches("codex/config.toml", ".codex/**")

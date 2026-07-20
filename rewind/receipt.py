@@ -31,7 +31,9 @@ DEPENDENCY_PATTERNS = (
 
 
 def path_matches(path: str, pattern: str) -> bool:
-    normalized = path.replace("\\", "/").lstrip("./")
+    normalized = path.replace("\\", "/")
+    while normalized.startswith("./"):
+        normalized = normalized[2:]
     candidate = PurePosixPath(normalized)
     if pattern.endswith("/**") and normalized.startswith(pattern[:-3].rstrip("/") + "/"):
         return True
