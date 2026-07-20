@@ -44,5 +44,5 @@ This file is updated as milestones land. The initial package and signing core ar
 - I decided: generated fixtures remain disposable rather than committed; the README carries a clearly marked `/feedback` placeholder until the submission action returns the real Session ID.
 - Alternatives rejected: a checked-in private/demo identity, a misleading screenshot that could drift, and claims of Windows validation or universal enforcement.
 - Tests run: 12 passed including the full generated-demo layout; final offline demo generated; both documented CLI replay commands passed; recovery branch exists while `main` remains checked out; Git hygiene, report self-containment, and secret/private-state audit passed; `codex mcp list/get` recognizes the enabled project server.
-- Commit SHA: pending.
+- Commit SHA: `136301d`.
 - Limitation: the already-running desktop task cannot inject newly configured MCP tools into its active tool set; the Codex CLI recognizes the server and the stdio transport/exact five tools are acceptance-tested directly. A new task or client restart is required for the recorded MCP demo call.
