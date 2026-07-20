@@ -143,7 +143,7 @@ def get_object(paths: RewindPaths, digest: str) -> bytes:
 
 
 def project(paths: RewindPaths) -> EventLog:
-    if not paths.private_key.exists() or not paths.events.exists():
+    if not paths.private_key.exists():
         raise RewindError("Rewind is not initialized. Run `rewind init` first.")
     return EventLog(paths.events, load_signing_key(paths.private_key))
 

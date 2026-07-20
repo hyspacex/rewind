@@ -7,7 +7,33 @@ This file is updated as milestones land. The initial package and signing core ar
 - Codex implemented: package metadata; deterministic canonical JSON, SHA-256 content IDs, Ed25519 envelopes, chained JSONL verification, repository-local storage, safe initialization, policy v1/v2 objects, CLI shell, MCP bootstrap, Codex workflow instructions, and verified project-local MCP configuration.
 - I decided: the individual developer receipt is the front door; deterministic verification is the product; PyNaCl is the single signing dependency; macOS/Linux and Python 3.10+ are the initial supported environment.
 - Alternatives rejected: runtime LLM calls, live dashboard, destructive recovery, general policy language, blockchain, and an optional Codex hook before core acceptance is complete.
-- Tests run: toolchain inspection; installed Codex 0.145.0-alpha.18 `mcp add` schema generation in a temporary home; official Codex MCP configuration reference lookup.
-- Commit SHA: pending.
+- Tests run: toolchain inspection; installed Codex 0.145.0-alpha.18 `mcp add` schema generation in a temporary home; official Codex MCP configuration reference lookup; 2 signing tests; editable install; CLI help.
+- Commit SHA: `1640e0b`.
 - Limitation: the active Codex session will not discover a newly written project MCP config until a new/restarted session.
 
+## 2026-07-20T05:31Z — Recorder activated
+
+- Codex implemented: fixed the first-event bootstrap boundary, initialized the trusted recorder, started task `task_97167c332e`, and recorded the initial private Git checkpoint.
+- I decided: generated `.rewind/` state remains entirely local and ignored; the repository ships its defaults in the package rather than committing a live recorder identity.
+- Alternatives rejected: committing a demo/private key or treating the bootstrap files as if Rewind had governed their creation.
+- Tests run: successful `rewind init`; signed genesis and policy activation verification; `rewind status`.
+- Commit SHA: `1640e0b` is the explicit bootstrap parent; feature commit pending.
+- Limitation: private Git ref writes require sandbox approval in this Codex session, although normal local Git does not.
+
+## 2026-07-20T05:44Z — Developer receipt and historical replay
+
+- Codex implemented: temporary-index Git checkpoints, untracked-file capture, recorded checks, content-addressed evidence, task lifecycle, deterministic risk signals, Rich receipt/timeline, branch-only recovery, self-contained HTML, narrow v1/v2 replay, four forensic fixtures, the offline demo, and five stdio MCP tools with CLI parity.
+- I decided: Git-ignored files stay ignored while all other untracked files are captured; an observed deployment is evidence that an external action happened, not an authorization request; L3 is blocked when L2 fails.
+- Alternatives rejected: filtering common generated files inside Rewind, retroactive approval of an observed deployment, a second receipt logic path for HTML, and adding a Codex hook before acceptance.
+- Tests run through Rewind: 2 passed at `cp_03`; an intentional expanded-suite failure at `cp_05` exposed an unignored test cache; 10 passed at `cp_06`; 11 passed including MCP at `cp_08`; offline demo passed at `cp_07` and again from a fresh console install at `cp_09`.
+- Commit SHA: pending.
+- Limitations: the audit engine intentionally supports only the two documented policies; the active Codex session predates `.codex/config.toml`, so MCP is verified through a real stdio client round trip and must be discovered by Codex after restart.
+
+## 2026-07-20T05:44Z — Visual and install verification
+
+- Codex implemented: macOS-safe `venv/` setup for the project MCP command and improved blocked-stage audit copy.
+- I decided: keep the calm graphite instrument aesthetic at a 1280×720 target; show the developer receipt first and the L0–L3 language only in the audit reveal.
+- Alternatives rejected: installing Node solely for Playwright, external fonts/assets, JavaScript UI, gradients, and decorative effects.
+- Tests run: fresh `venv/bin/pip install -e '.[dev]'`; installed `rewind --help` and `--version`; in-app real-browser checks at 1280×720 for both reports; zero horizontal overflow, external assets, scripts, console warnings, or errors.
+- Commit SHA: pending.
+- Limitation: the dot-prefixed `.venv/` on this Mac inherited a filesystem hidden flag that Python used to skip editable `.pth` loading; the documented non-hidden `venv/` path avoids that environment-specific issue.
