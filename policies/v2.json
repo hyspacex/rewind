@@ -1,0 +1,12 @@
+{
+  "id": "v2",
+  "protected_changes": {
+    "require_human_approval": true,
+    "require_successful_evidence": true,
+    "separation_of_duties": true
+  },
+  "deployment": {
+    "require_deployer_role": true
+  }
+}
+

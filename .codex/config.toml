@@ -1,0 +1,10 @@
+# Codex loads project configuration only after the repository is trusted.
+# Create the environment with: python3 -m venv .venv && .venv/bin/pip install -e .
+[mcp_servers.rewind]
+command = ".venv/bin/python"
+args = ["-m", "rewind.mcp_server"]
+cwd = "."
+startup_timeout_sec = 10
+tool_timeout_sec = 300
+enabled = true
+
