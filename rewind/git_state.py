@@ -124,6 +124,29 @@ def tree_for_commit(root: Path, commit: str) -> str:
     return _git(root, "rev-parse", f"{commit}^{{tree}}").stdout.strip()
 
 
+def checkpoint_integrity_issue(
+    root: Path,
+    *,
+    commit: str,
+    tree: str,
+    ref: str,
+) -> str | None:
+    """Return why a signed checkpoint is not recoverable, or ``None``."""
+    if not ref.startswith("refs/rewind/checkpoints/"):
+        return f"checkpoint ref is outside Rewind's private namespace: {ref}"
+    resolved = _git(root, "rev-parse", "--verify", ref, check=False)
+    if resolved.returncode:
+        return f"checkpoint ref is missing: {ref}"
+    if resolved.stdout.strip() != commit:
+        return f"checkpoint ref {ref} does not point at its signed commit"
+    actual_tree = _git(root, "rev-parse", "--verify", f"{commit}^{{tree}}", check=False)
+    if actual_tree.returncode:
+        return f"checkpoint commit is missing or invalid: {commit}"
+    if actual_tree.stdout.strip() != tree:
+        return f"checkpoint commit {commit[:12]} does not contain its signed tree"
+    return None
+
+
 def create_recovery_branch(root: Path, name: str, commit: str) -> None:
     if not name.startswith("rewind/"):
         raise RewindError("Recovery branch names must start with `rewind/`.")

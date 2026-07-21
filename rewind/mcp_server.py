@@ -40,9 +40,9 @@ def main() -> None:
         return record_checkpoint(_paths(), label)
 
     @server.tool()
-    def run_check(argv: list[str]) -> dict[str, Any]:
+    def run_check(argv: list[str], action_id: str | None = None) -> dict[str, Any]:
         """Execute argv without a shell and bind its evidence to exact Git state."""
-        return core_run_check(_paths(), argv)
+        return core_run_check(_paths(), argv, action_id=action_id)
 
     @server.tool(name="finish_task")
     def finish_task_tool() -> dict[str, Any]:

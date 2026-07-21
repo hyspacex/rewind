@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import fcntl
 import json
+import os
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Iterator
 
 from nacl.signing import SigningKey, VerifyKey
 
@@ -71,7 +74,24 @@ def parse_jsonl(path: Path) -> Iterable[tuple[int, dict[str, Any]]]:
             yield line_number, value
 
 
-def verify_log(path: Path, verify_key: VerifyKey) -> LogVerification:
+@contextmanager
+def file_lock(path: Path, *, shared: bool = False) -> Iterator[None]:
+    """Hold a POSIX advisory lock for a repository-local critical section."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a+b") as handle:
+        operation = fcntl.LOCK_SH if shared else fcntl.LOCK_EX
+        fcntl.flock(handle.fileno(), operation)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
+def _event_lock_path(path: Path) -> Path:
+    return path.parent / "tmp" / "events.lock"
+
+
+def _verify_log_unlocked(path: Path, verify_key: VerifyKey) -> LogVerification:
     result = LogVerification(valid=True)
     expected_previous: str | None = None
     expected_sequence = 1
@@ -146,6 +166,13 @@ def verify_log(path: Path, verify_key: VerifyKey) -> LogVerification:
     return result
 
 
+def verify_log(path: Path, verify_key: VerifyKey) -> LogVerification:
+    # Readers participate in the same lock as appenders so they never observe
+    # a partially flushed JSONL record.
+    with file_lock(_event_lock_path(path), shared=True):
+        return _verify_log_unlocked(path, verify_key)
+
+
 class EventLog:
     def __init__(self, path: Path, signing_key: SigningKey):
         self.path = path
@@ -155,25 +182,26 @@ class EventLog:
     def append(self, event_type: str, payload: dict[str, Any], actor: str = "recorder") -> dict[str, Any]:
         if event_type not in EVENT_TYPES:
             raise ValueError(f"unsupported event type: {event_type}")
-        verification = verify_log(self.path, self.verify_key)
-        if not verification.valid:
-            raise IntegrityError("refusing to append to an invalid event log")
-        previous = verification.events[-1]["content_id"] if verification.events else None
-        unsigned = {
-            "schema": EVENT_SCHEMA,
-            "sequence": len(verification.events) + 1,
-            "recorded_at": utc_now(),
-            "type": event_type,
-            "actor": actor,
-            "payload": payload,
-            "previous_content_id": previous,
-            "key_id": key_id(self.verify_key),
-        }
-        event_id, signature = sign_envelope(self.signing_key, unsigned)
-        event = {**unsigned, "content_id": event_id, "signature": signature}
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self.path.open("ab") as handle:
-            handle.write(canonical_bytes(event) + b"\n")
-            handle.flush()
-        return event
-
+        with file_lock(_event_lock_path(self.path)):
+            verification = _verify_log_unlocked(self.path, self.verify_key)
+            if not verification.valid:
+                raise IntegrityError("refusing to append to an invalid event log")
+            previous = verification.events[-1]["content_id"] if verification.events else None
+            unsigned = {
+                "schema": EVENT_SCHEMA,
+                "sequence": len(verification.events) + 1,
+                "recorded_at": utc_now(),
+                "type": event_type,
+                "actor": actor,
+                "payload": payload,
+                "previous_content_id": previous,
+                "key_id": key_id(self.verify_key),
+            }
+            event_id, signature = sign_envelope(self.signing_key, unsigned)
+            event = {**unsigned, "content_id": event_id, "signature": signature}
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            with self.path.open("ab") as handle:
+                handle.write(canonical_bytes(event) + b"\n")
+                handle.flush()
+                os.fsync(handle.fileno())
+            return event

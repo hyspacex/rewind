@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import html
+import shlex
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -27,12 +29,46 @@ def _signal_card(signal: dict[str, Any]) -> str:
     )
 
 
-def render_report(receipt: dict[str, Any], output: Path) -> Path:
+def _count(value: int, singular: str, plural: str | None = None) -> str:
+    return f"{value} {singular if value == 1 else (plural or singular + 's')}"
+
+
+def render_report(
+    receipt: dict[str, Any],
+    output: Path,
+    *,
+    rewind_command: str | None = None,
+) -> Path:
+    """Render a report, optionally overriding the command used in recovery instructions.
+
+    By default the report records the current Python interpreter with
+    ``-m rewind.cli`` so the generated command does not assume that a global
+    ``rewind`` executable is on PATH. Embedders can provide their installed
+    invocation with ``rewind_command``.
+    """
     recovery = receipt.get("recommended_recovery")
+    recovery_kind = receipt.get("recommended_recovery_kind")
+    recovery_basis = "tested" if recovery_kind == "test" else "checked"
+    invocation = rewind_command or shlex.join([sys.executable, "-m", "rewind.cli"])
     recovery_command = (
-        f"rewind recover {recovery['checkpoint_id']} --branch rewind/recover-{receipt['task_id']}"
+        f"{invocation} recover {recovery['checkpoint_id']} "
+        f"--task {receipt['task_id']} --branch rewind/recover-{receipt['task_id']}"
         if recovery
-        else "No recovery branch is available until a check passes."
+        else "No recovery command is recommended."
+    )
+    recovery_signal = next(
+        signal for signal in receipt["signals"] if signal["key"] == "recovery"
+    )
+    recovery_heading = (
+        f"Branch-only recovery from a verified {recovery_basis} state"
+        if recovery
+        else "Recovery unavailable"
+    )
+    recovery_copy = (
+        "Rewind will only create this branch. It will not switch, reset, clean, stash, "
+        "or modify your current work."
+        if recovery
+        else str(recovery_signal["summary"])
     )
     timeline = "".join(
         (
@@ -52,13 +88,14 @@ def render_report(receipt: dict[str, Any], output: Path) -> Path:
             f'<td><span class="badge {"pass" if check["passed"] else "fail"}">'
             f'{"PASS" if check["passed"] else "FAIL"}</span></td>'
             f"<td><code>{_e(' '.join(check['argv']))}</code></td>"
+            f"<td>{_e('Test' if check.get('kind') == 'test' else 'Check')}</td>"
             f"<td><code>{_e(check['checkpoint_id'])}</code></td>"
             f"<td>{_e(check['duration_ms'])} ms</td>"
             f"<td><code>{_e(check['evidence_sha256'][:14])}</code></td>"
             "</tr>"
         )
         for check in receipt["checks"]
-    ) or '<tr><td colspan="5" class="muted">No recorded checks.</td></tr>'
+    ) or '<tr><td colspan="6" class="muted">No recorded checks.</td></tr>'
     audit_issues = _file_list(
         [
             f"{issue.get('level', 'L1')} {issue['code']}: {issue['message']}"
@@ -67,9 +104,18 @@ def render_report(receipt: dict[str, Any], output: Path) -> Path:
         "No integrity issues detected.",
     )
     tests = (
-        f"{receipt['test_count']} tests passed"
+        f"{_count(receipt['test_count'], 'test')} passed"
         if receipt.get("test_count") is not None
-        else f"{receipt['passing_check_count']} passing checks"
+        else f"{_count(receipt['passing_check_count'], 'passing check')}"
+    )
+    review_items = _count(receipt["review_item_count"], "item") + " to review"
+    changed_files = _count(len(receipt["changed_files"]), "file") + " changed"
+    recovery_class = "recovery" if recovery else "recovery unavailable"
+    recommended_state = (
+        f"Recommended {recovery_basis} state: "
+        f"<strong>{_e(recovery['checkpoint_id'])}</strong>"
+        if recovery
+        else "Recommended recovery state: <strong>none</strong>"
     )
     document = f"""<!doctype html>
 <html lang="en">
@@ -103,7 +149,7 @@ h1 {{ font-size:clamp(30px,4vw,55px); line-height:1.05; margin:14px 0 12px; max-
 .stats strong {{ color:var(--text); }}
 .file-grid {{ display:grid; grid-template-columns:repeat(3,1fr); gap:24px; }}
 .files {{ list-style:none; margin:0; padding:0; }} .files li {{ padding:7px 0; border-bottom:1px solid #262b30; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:13px; overflow-wrap:anywhere; }}
-.recovery {{ border-left:5px solid var(--green); }} code,.command {{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }}
+.recovery {{ border-left:5px solid var(--green); }} .recovery.unavailable {{ border-left-color:var(--red); }} code,.command {{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }}
 .command {{ display:block; background:#0b0d0f; border:1px solid var(--line); padding:15px; overflow-wrap:anywhere; color:#dfe5e9; }}
 table {{ width:100%; border-collapse:collapse; }} th,td {{ text-align:left; padding:11px; border-bottom:1px solid var(--line); font-size:14px; }}
 th {{ color:var(--muted); font-weight:600; }} .timeline {{ list-style:none; padding:0; margin:0; }}
@@ -120,11 +166,11 @@ footer {{ margin-top:30px; color:var(--muted); font-size:13px; }}
 <header>
 <div><div class="brand">REWIND / TASK RECEIPT</div><h1>{_e(receipt['intent'])}</h1>
 <div class="meta">{_e(receipt['task_id'])} · {_e(receipt['elapsed_display'])} · final tree <code>{_e(receipt['final_checkpoint']['tree'][:12])}</code></div></div>
-<div class="status {_e(receipt['outcome_key'])}"><strong>{_e(receipt['outcome'])}</strong><span>{_e(receipt['review_item_count'])} items to review</span></div>
+<div class="status {_e(receipt['outcome_key'])}"><strong>{_e(receipt['outcome'])}</strong><span>{_e(review_items)}</span></div>
 </header>
 <section class="signals">{''.join(_signal_card(signal) for signal in receipt['signals'])}</section>
-<section class="section"><div class="stats"><span><strong>{len(receipt['changed_files'])}</strong> files changed</span>
-<span><strong>{_e(tests)}</strong></span><span>Safe state: <strong>{_e(recovery['checkpoint_id'] if recovery else 'none')}</strong></span>
+<section class="section"><div class="stats"><span><strong>{_e(changed_files)}</strong></span>
+<span><strong>{_e(tests)}</strong></span><span>{recommended_state}</span>
 <span>Final state: <strong>{_e(receipt['final_checkpoint']['checkpoint_id'])}</strong></span></div></section>
 <section class="section"><h2>Changed files</h2><div class="file-grid">
 <div><h3>Within declared scope</h3>{_file_list(receipt['within_scope'])}</div>
@@ -133,10 +179,10 @@ footer {{ margin-top:30px; color:var(--muted); font-size:13px; }}
 </div></section>
 <section class="section"><h2>Intent → action → evidence</h2>
 <p class="muted">Declared intent: {_e(receipt['intent'])}</p>
-<table><thead><tr><th>Result</th><th>Recorded command</th><th>Bound state</th><th>Duration</th><th>Evidence</th></tr></thead>
+<table><thead><tr><th>Result</th><th>Recorded command</th><th>Kind</th><th>Bound state</th><th>Duration</th><th>Evidence</th></tr></thead>
 <tbody>{check_rows}</tbody></table></section>
-<section class="section recovery"><h2>Safe recovery</h2>
-<p>Rewind only creates this branch. It will not switch, reset, clean, stash, or modify your current work.</p>
+<section class="section {_e(recovery_class)}"><h2>{_e(recovery_heading)}</h2>
+<p>{_e(recovery_copy)}</p>
 <code class="command">{_e(recovery_command)}</code></section>
 <section class="section"><h2>Timeline</h2><ol class="timeline">{timeline}</ol></section>
 <details class="section"><summary>Signed audit details</summary>
@@ -152,4 +198,3 @@ footer {{ margin-top:30px; color:var(--muted); font-size:13px; }}
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(document, encoding="utf-8")
     return output
-

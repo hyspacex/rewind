@@ -41,8 +41,16 @@ This file is updated as milestones land. The initial package and signing core ar
 ## 2026-07-20T05:49Z — Code freeze and judge handoff
 
 - Codex implemented: complete README, exact three-minute demo script, generated-fixture guide, CLI-replayable forensic repositories, architecture and format documentation, and explicit collaboration/threat-model sections.
-- I decided: generated fixtures remain disposable rather than committed; the README carries a clearly marked `/feedback` placeholder until the submission action returns the real Session ID.
+- I decided: generated fixtures remain disposable rather than committed; no `/feedback` Session ID is claimed because one was not captured in the build-session materials.
 - Alternatives rejected: a checked-in private/demo identity, a misleading screenshot that could drift, and claims of Windows validation or universal enforcement.
 - Tests run: 12 passed including the full generated-demo layout; final offline demo generated; both documented CLI replay commands passed; recovery branch exists while `main` remains checked out; Git hygiene, report self-containment, and secret/private-state audit passed; `codex mcp list/get` recognizes the enabled project server.
 - Commit SHA: `136301d`.
 - Limitation: the already-running desktop task cannot inject newly configured MCP tools into its active tool set; the Codex CLI recognizes the server and the stdio transport/exact five tools are acceptance-tested directly. A new task or client restart is required for the recorded MCP demo call.
+
+## 2026-07-20T07:33Z — Independent verification and trust hardening
+
+- Codex implemented: cross-process lifecycle/event locks; atomic evidence-object writes; durable failed evidence for command-launch errors; incomplete-attempt detection; semantic agreement checks between signed fields and hashed command output; integrity-gated recovery; task-qualified recovery commands; provisional active-task receipts; signed task-level protected globs; fresh-clone initialization that preserves committed shared config; fail-fast nested lifecycle handling; exact task diffs; hash-verified evidence inspection; and a public audit lifecycle.
+- I decided: any unverifiable, contradictory, incomplete, ambiguous, or missing recovery state must fail closed; arbitrary commands remain checks rather than tests; active receipts cannot claim completion; report recovery commands always name their task; recorded output is rendered without replaying terminal control characters; and no `/feedback` Session ID is fabricated.
+- Alternatives rejected: trusting a signed `passed` boolean without reconciling exit status, overwriting shared `.rewind` configuration, allowing checkpoint IDs to race or silently resolve across tasks, calling unverified checkpoints safe, blocking forever on nested lifecycle commands, and keeping audit replay accessible only through demo fixtures.
+- Tests run through Rewind: 45 passed, including parallel subprocess checkpoints/appends, in-flight finish ordering, missing executables, incomplete attempts, semantic evidence mismatch, active receipt behavior, cross-task recovery, missing checkpoint refs, shared-config initialization, public audit replay, CLI inspection, MCP schema/call, and all four forensic fixtures. The final offline demo passed and produced the expected PFFF/PPFF/PPPF/PPPP matrix.
+- Commit SHA: pending integration.
