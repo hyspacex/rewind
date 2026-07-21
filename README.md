@@ -4,6 +4,8 @@
 
 Rewind shows exactly what your coding agent did, catches where it went off course, and gives you a safe place to recover—with a signed record teams can audit later.
 
+**Three-minute demo video:** https://youtu.be/PGSZa1m9miI
+
 The default experience is an agent task receipt, not a compliance dashboard:
 
 - What changed, and which paths were outside the scope I declared?
