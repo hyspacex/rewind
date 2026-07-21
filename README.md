@@ -302,6 +302,10 @@ The Rewind runtime itself does **not** use GPT-5.6 or make OpenAI API calls.
 
 Primary Codex `/feedback` Session ID: `019f7df9-ae75-74d1-b60a-4c580ba3a18c`.
 
+## Team
+
+Rewind was made by **Harry Xie** and **Rocker D'Antonio** for OpenAI Build Week.
+
 ## License
 
 MIT. See `LICENSE`.
